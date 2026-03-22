@@ -1,20 +1,20 @@
 import requests
 import xml.etree.ElementTree as ET
 from youtube_transcript_api import YouTubeTranscriptApi
+import subprocess
+import os
 
 # 🔹 TELEGRAM INFO
 TELEGRAM_TOKEN = "8699414099:AAGA89Ig1Ijwn0gzWQM0jlfE1bYUi6L5970"
 CHAT_ID = "8205944221"
 
-# 🔥 MULTIPLE CHANNELS (real working ones)
+# 🔥 CHANNELS
 CHANNELS = {
     "Kai Cenat": "UCvC4D8onUfXzvjTOM-dBfEA",
-    "IShowSpeed": "UCWsDFcIhY2DBi3GB5uykGXA",
-    "Jynxzi": "UC9p4X4Zx3rY5lQ6Kp0Z9Y3Q",
-    "Joe Bartolozzi": "UC8j9G5e9Q2Kz4W5t6Y7Z8A"
+    "IShowSpeed": "UCWsDFcIhY2DBi3GB5uykGXA"
 }
 
-
+# 🔍 GET LATEST VIDEO
 def get_latest_video(channel_id):
     try:
         url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
@@ -27,16 +27,21 @@ def get_latest_video(channel_id):
     except:
         return None
 
-
+# 📜 GET TRANSCRIPT
 def get_transcript(video_id):
     try:
         return YouTubeTranscriptApi.get_transcript(video_id)
     except:
         return []
 
-
+# 🔥 FIND MOMENTS
 def find_moments(transcript):
-    keywords = ["what", "no way", "bro", "oh my god", "crazy", "wtf"]
+    keywords = [
+        "no way", "oh my god", "bro", "what", "this is crazy",
+        "ain't no way", "nah", "yo", "chat", "wtf",
+        "that's insane", "i can't believe"
+    ]
+
     timestamps = []
 
     for entry in transcript:
@@ -46,21 +51,51 @@ def find_moments(transcript):
         if any(word in text for word in keywords):
             timestamps.append(start)
 
-    return timestamps[:5]
+    return timestamps[:2]
 
+# 🎥 DOWNLOAD VIDEO
+def download_video(video_id):
+    url = f"https://www.youtube.com/watch?v={video_id}"
 
-def send_to_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    subprocess.run([
+        "yt-dlp",
+        "-f", "mp4",
+        "-o", "video.mp4",
+        url
+    ])
 
-    data = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "disable_web_page_preview": False
-    }
+    return "video.mp4"
 
-    requests.post(url, data=data)
+# ✂️ CUT CLIP
+def cut_clip(start, duration=20):
+    output = f"clip_{start}.mp4"
 
+    subprocess.run([
+        "ffmpeg",
+        "-ss", str(start),
+        "-i", "video.mp4",
+        "-t", str(duration),
+        "-c", "copy",
+        output
+    ])
 
+    return output
+
+# 📲 SEND VIDEO
+def send_video(file_path, caption):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
+
+    with open(file_path, "rb") as video:
+        requests.post(
+            url,
+            data={
+                "chat_id": CHAT_ID,
+                "caption": caption
+            },
+            files={"video": video}
+        )
+
+# 🚀 MAIN
 def main():
     for name, channel_id in CHANNELS.items():
         video_id = get_latest_video(channel_id)
@@ -68,35 +103,32 @@ def main():
         if not video_id:
             continue
 
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-
         transcript = get_transcript(video_id)
 
-        # 🔥 ALWAYS SEND (even if no transcript)
         if not transcript:
-            message = f"🔥 {name}\n🎥 {video_url}\n\n⚠️ No transcript available"
-            send_to_telegram(message)
             continue
 
         timestamps = find_moments(transcript)
 
-        # 🔥 If no good moments found
         if not timestamps:
-            message = f"🔥 {name}\n🎥 {video_url}\n\n⚠️ No strong moments found"
-            send_to_telegram(message)
             continue
 
-        # 🔥 Normal case
-        message = f"🔥 {name}\n🎥 {video_url}\n\n🔥 BEST MOMENTS:\n\n"
+        video_file = download_video(video_id)
 
-        for i, t in enumerate(timestamps, 1):
+        for t in timestamps:
+            clip = cut_clip(t)
+
             minutes = t // 60
             seconds = t % 60
-            link = f"https://youtu.be/{video_id}?t={t}"
 
-            message += f"{i}. {minutes:02d}:{seconds:02d} → {link}\n"
+            caption = f"🔥 {name} | {minutes:02d}:{seconds:02d}"
 
-        send_to_telegram(message)
+            send_video(clip, caption)
+
+        # 🧹 CLEAN FILES
+        for file in os.listdir():
+            if file.endswith(".mp4"):
+                os.remove(file)
 
 
 if __name__ == "__main__":
