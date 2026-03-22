@@ -6,9 +6,9 @@ from youtube_transcript_api import YouTubeTranscriptApi
 TELEGRAM_TOKEN = "8699414099:AAGA89Ig1Ijwn0gzWQM0jlfE1bYUi6L5970"
 CHAT_ID = "8205944221"
 
-# 🔥 MULTIPLE CHANNELS
+# 🔥 MULTIPLE CHANNELS (real working ones)
 CHANNELS = {
-    "Kai Cenat": "UC4x5xZx9PpZ2fQnYz0g1gYw",
+    "Kai Cenat": "UCvC4D8onUfXzvjTOM-dBfEA",
     "IShowSpeed": "UCWsDFcIhY2DBi3GB5uykGXA",
     "Jynxzi": "UC9p4X4Zx3rY5lQ6Kp0Z9Y3Q",
     "Joe Bartolozzi": "UC8j9G5e9Q2Kz4W5t6Y7Z8A"
@@ -61,25 +61,6 @@ def send_to_telegram(message):
     requests.post(url, data=data)
 
 
-def format_message(name, video_id, timestamps):
-    video_url = f"https://www.youtube.com/watch?v={video_id}"
-
-    message = f"🔥 {name}\n🎥 {video_url}\n\n🔥 BEST MOMENTS:\n\n"
-
-    if not timestamps:
-        message += "No strong moments found.\n"
-        return message
-
-    for i, t in enumerate(timestamps, 1):
-        minutes = t // 60
-        seconds = t % 60
-        link = f"https://youtu.be/{video_id}?t={t}"
-
-        message += f"{i}. {minutes:02d}:{seconds:02d} → {link}\n"
-
-    return message
-
-
 def main():
     for name, channel_id in CHANNELS.items():
         video_id = get_latest_video(channel_id)
@@ -87,14 +68,33 @@ def main():
         if not video_id:
             continue
 
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+
         transcript = get_transcript(video_id)
 
+        # 🔥 ALWAYS SEND (even if no transcript)
         if not transcript:
+            message = f"🔥 {name}\n🎥 {video_url}\n\n⚠️ No transcript available"
+            send_to_telegram(message)
             continue
 
         timestamps = find_moments(transcript)
 
-        message = format_message(name, video_id, timestamps)
+        # 🔥 If no good moments found
+        if not timestamps:
+            message = f"🔥 {name}\n🎥 {video_url}\n\n⚠️ No strong moments found"
+            send_to_telegram(message)
+            continue
+
+        # 🔥 Normal case
+        message = f"🔥 {name}\n🎥 {video_url}\n\n🔥 BEST MOMENTS:\n\n"
+
+        for i, t in enumerate(timestamps, 1):
+            minutes = t // 60
+            seconds = t % 60
+            link = f"https://youtu.be/{video_id}?t={t}"
+
+            message += f"{i}. {minutes:02d}:{seconds:02d} → {link}\n"
 
         send_to_telegram(message)
 
