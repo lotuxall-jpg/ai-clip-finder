@@ -1,135 +1,87 @@
-import requests
-import xml.etree.ElementTree as ET
-from youtube_transcript_api import YouTubeTranscriptApi
-import subprocess
 import os
+import requests
+import random
+from pytube import YouTube
+from moviepy.editor import VideoFileClip
 
-# 🔹 TELEGRAM INFO
-TELEGRAM_TOKEN = "8699414099:AAGA89Ig1Ijwn0gzWQM0jlfE1bYUi6L5970"
-CHAT_ID = "8205944221"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
-# 🔥 CHANNELS
-CHANNELS = {
-    "Kai Cenat": "UCvC4D8onUfXzvjTOM-dBfEA",
-    "IShowSpeed": "UCWsDFcIhY2DBi3GB5uykGXA"
-}
+def send_message(text):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": CHAT_ID, "text": text})
 
-# 🔍 GET LATEST VIDEO
-def get_latest_video(channel_id):
+def send_video(file):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
+    with open(file, "rb") as vid:
+        requests.post(url, data={"chat_id": CHAT_ID}, files={"video": vid})
+
+def get_video(channel_id):
+    url = f"https://www.googleapis.com/youtube/v3/search?key={YOUTUBE_API_KEY}&channelId={channel_id}&part=snippet,id&order=date&maxResults=1"
+    data = requests.get(url).json()
     try:
-        url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
-        response = requests.get(url)
-        root = ET.fromstring(response.content)
-
-        for entry in root.findall("{http://www.w3.org/2005/Atom}entry"):
-            video_id = entry.find("{http://www.youtube.com/xml/schemas/2015}videoId").text
-            return video_id
+        vid = data["items"][0]["id"]["videoId"]
+        return f"https://youtube.com/watch?v={vid}"
     except:
         return None
 
-# 📜 GET TRANSCRIPT
-def get_transcript(video_id):
+def download(url):
     try:
-        return YouTubeTranscriptApi.get_transcript(video_id)
+        yt = YouTube(url)
+        stream = yt.streams.filter(progressive=True, file_extension="mp4").first()
+        stream.download(filename="video.mp4")
+        return "video.mp4"
     except:
-        return []
+        return None
 
-# 🔥 FIND MOMENTS
-def find_moments(transcript):
-    keywords = [
-        "no way", "oh my god", "bro", "what", "this is crazy",
-        "ain't no way", "nah", "yo", "chat", "wtf",
-        "that's insane", "i can't believe"
+def make_clips(video):
+    clips = []
+    vid = VideoFileClip(video)
+    duration = int(vid.duration)
+
+    for i in range(2):
+        start = random.randint(0, max(1, duration - 40))
+        end = start + 25
+        clip = vid.subclip(start, end)
+        name = f"clip{i}.mp4"
+        clip.write_videofile(name, codec="libx264", audio_codec="aac")
+        clips.append(name)
+
+    return clips
+
+def main():
+    channels = [
+        "UCWsDFcIhY2DBi3GB5uykGXA",  # IShowSpeed
+        "UC9gFih9rw0zNCK3ZtoKQQyA",  # Kai Cenat
+        "UCVtFOytbRpEvzLjvqGG5gxQ",  # Jynxzi
+        "UC4ncvgh5hFr5O83MH7-jRJg"   # Joe Bartolozzi
     ]
 
-    timestamps = []
+    send_message("🔍 Finding video...")
 
-    for entry in transcript:
-        text = entry["text"].lower()
-        start = int(entry["start"])
+    url = get_video(random.choice(channels))
 
-        if any(word in text for word in keywords):
-            timestamps.append(start)
+    if not url:
+        send_message("❌ No video found")
+        return
 
-    return timestamps[:2]
+    send_message(f"🎬 {url}")
 
-# 🎥 DOWNLOAD VIDEO
-def download_video(video_id):
-    url = f"https://www.youtube.com/watch?v={video_id}"
+    vid = download(url)
 
-    subprocess.run([
-        "yt-dlp",
-        "-f", "mp4",
-        "-o", "video.mp4",
-        url
-    ])
+    if not vid:
+        send_message("❌ Download failed")
+        return
 
-    return "video.mp4"
+    send_message("✂️ Making clips...")
 
-# ✂️ CUT CLIP
-def cut_clip(start, duration=20):
-    output = f"clip_{start}.mp4"
+    clips = make_clips(vid)
 
-    subprocess.run([
-        "ffmpeg",
-        "-ss", str(start),
-        "-i", "video.mp4",
-        "-t", str(duration),
-        "-c", "copy",
-        output
-    ])
+    for c in clips:
+        send_video(c)
 
-    return output
-
-# 📲 SEND VIDEO
-def send_video(file_path, caption):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
-
-    with open(file_path, "rb") as video:
-        requests.post(
-            url,
-            data={
-                "chat_id": CHAT_ID,
-                "caption": caption
-            },
-            files={"video": video}
-        )
-
-# 🚀 MAIN
-def main():
-    for name, channel_id in CHANNELS.items():
-        video_id = get_latest_video(channel_id)
-
-        if not video_id:
-            continue
-
-        transcript = get_transcript(video_id)
-
-        if not transcript:
-            continue
-
-        timestamps = find_moments(transcript)
-
-        if not timestamps:
-            continue
-
-        video_file = download_video(video_id)
-
-        for t in timestamps:
-            clip = cut_clip(t)
-
-            minutes = t // 60
-            seconds = t % 60
-
-            caption = f"🔥 {name} | {minutes:02d}:{seconds:02d}"
-
-            send_video(clip, caption)
-
-        # 🧹 CLEAN FILES
-        for file in os.listdir():
-            if file.endswith(".mp4"):
-                os.remove(file)
-
+    send_message("✅ Done!")
 
 if __name__ == "__main__":
     main()
