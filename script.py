@@ -1,7 +1,13 @@
 import requests
 import xml.etree.ElementTree as ET
 
-CHANNEL_ID = "UC_x5XG1OV2P6uZZ5FSM9Ttw"  # TEMP test channel (Google Devs)
+# 🔹 ADD YOUR TELEGRAM INFO HERE
+TELEGRAM_TOKEN = "8699414099:AAGA89Ig1Ijwn0gzWQM0jlfE1bYUi6L5970"
+CHAT_ID = "8205944221"
+
+# 🔹 CHANNEL ID (change later to Kai Cenat etc.)
+CHANNEL_ID = "UC_x5XG1OV2P6uZZ5FSM9Ttw"
+
 
 def get_latest_video(channel_id):
     try:
@@ -47,14 +53,27 @@ def find_viral_moments(transcript):
     return moments[:5]
 
 
+def send_to_telegram(message):
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        
+        data = {
+            "chat_id": CHAT_ID,
+            "text": message
+        }
+
+        requests.post(url, data=data)
+
+    except Exception as e:
+        print("❌ Telegram error:", e)
+
+
 def main():
     video_id = get_latest_video(CHANNEL_ID)
 
     if not video_id:
         print("❌ No video found")
         return
-
-    print(f"🎥 Video ID: {video_id}")
 
     transcript = get_transcript(video_id)
 
@@ -64,9 +83,12 @@ def main():
 
     moments = find_viral_moments(transcript)
 
-    print("\n🔥 Viral Moments:\n")
+    message = f"🎥 Video ID: {video_id}\n\n🔥 Viral Moments:\n\n"
+
     for i, moment in enumerate(moments, 1):
-        print(f"{i}. {moment}\n")
+        message += f"{i}. {moment}\n\n"
+
+    send_to_telegram(message)
 
 
 if __name__ == "__main__":
