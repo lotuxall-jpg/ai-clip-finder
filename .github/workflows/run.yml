@@ -1,9 +1,9 @@
-name: Run AI Clip Finder
+name: Run AI Clip Bot
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 * * * *'  # runs every hour
+    - cron: '0 * * * *'
 
 jobs:
   run-script:
@@ -13,13 +13,16 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests youtube-transcript-api
+        run: |
+          pip install requests youtube-transcript-api yt-dlp
+          sudo apt update
+          sudo apt install -y ffmpeg
 
       - name: Run script
         run: python script.py
