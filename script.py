@@ -1,87 +1,101 @@
-import os
 import requests
+import os
 import random
-from pytube import YouTube
 from moviepy.editor import VideoFileClip
+import yt_dlp
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+# =========================
+# 🔑 PUT YOUR INFO HERE
+# =========================
+BOT_TOKEN = "8699414099:AAGA89Ig1Ijwn0gzWQM0jlfE1bYUi6L5970"
+CHAT_ID = "8205944221"
+YOUTUBE_API_KEY = "AIzaSyBtVTfIH_C-ebrQOZha_37CyfugyyAfJ-8"
 
-def send_message(text):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": text})
+# Channels (IShowSpeed, Kai Cenat, Jynxzi, Joe Bartolozzi)
+CHANNEL_IDS = [
+    "UCWsDFcIhY2DBi3GB5uykGXA",  # IShowSpeed
+    "UC8m8c-6Yz9b0c2Y0l8kX1hA",  # Kai Cenat (example)
+    "UC9x4x2Z8W5y5Gg8cJ1fKJ2Q",  # Jynxzi (example)
+    "UCv0hP5x0YwF5c6M0B8j0g8g"   # Joe Bartolozzi (example)
+]
 
-def send_video(file):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
-    with open(file, "rb") as vid:
-        requests.post(url, data={"chat_id": CHAT_ID}, files={"video": vid})
+# =========================
+# 📲 TELEGRAM SEND
+# =========================
+def send_video(file_path, caption):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
+    with open(file_path, "rb") as video:
+        requests.post(url, data={"chat_id": CHAT_ID, "caption": caption}, files={"video": video})
 
-def get_video(channel_id):
-    url = f"https://www.googleapis.com/youtube/v3/search?key={YOUTUBE_API_KEY}&channelId={channel_id}&part=snippet,id&order=date&maxResults=1"
+# =========================
+# 🎥 GET RANDOM VIDEO
+# =========================
+def get_video():
+    channel_id = random.choice(CHANNEL_IDS)
+
+    url = f"https://www.googleapis.com/youtube/v3/search?key={YOUTUBE_API_KEY}&channelId={channel_id}&part=snippet,id&order=date&maxResults=5"
     data = requests.get(url).json()
-    try:
-        vid = data["items"][0]["id"]["videoId"]
-        return f"https://youtube.com/watch?v={vid}"
-    except:
-        return None
 
-def download(url):
-    try:
-        yt = YouTube(url)
-        stream = yt.streams.filter(progressive=True, file_extension="mp4").first()
-        stream.download(filename="video.mp4")
-        return "video.mp4"
-    except:
-        return None
+    for item in data["items"]:
+        if item["id"]["kind"] == "youtube#video":
+            return item["id"]["videoId"]
 
-def make_clips(video):
-    clips = []
-    vid = VideoFileClip(video)
-    duration = int(vid.duration)
+# =========================
+# ⬇️ DOWNLOAD VIDEO
+# =========================
+def download_video(video_id):
+    url = f"https://www.youtube.com/watch?v={video_id}"
 
-    for i in range(2):
-        start = random.randint(0, max(1, duration - 40))
-        end = start + 25
-        clip = vid.subclip(start, end)
-        name = f"clip{i}.mp4"
-        clip.write_videofile(name, codec="libx264", audio_codec="aac")
-        clips.append(name)
+    ydl_opts = {
+        "format": "best",
+        "outtmpl": "video.mp4"
+    }
 
-    return clips
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
 
+    return "video.mp4"
+
+# =========================
+# ✂️ CREATE CLIP
+# =========================
+def make_clip(input_file):
+    clip = VideoFileClip(input_file)
+
+    duration = clip.duration
+
+    # pick random 20–40 sec clip
+    start = random.randint(0, int(duration - 40))
+    end = start + random.randint(20, 40)
+
+    final = clip.subclip(start, end)
+    output = "clip.mp4"
+    final.write_videofile(output, codec="libx264", audio_codec="aac")
+
+    return output, start
+
+# =========================
+# 🚀 MAIN
+# =========================
 def main():
-    channels = [
-        "UCWsDFcIhY2DBi3GB5uykGXA",  # IShowSpeed
-        "UC9gFih9rw0zNCK3ZtoKQQyA",  # Kai Cenat
-        "UCVtFOytbRpEvzLjvqGG5gxQ",  # Jynxzi
-        "UC4ncvgh5hFr5O83MH7-jRJg"   # Joe Bartolozzi
-    ]
+    video_id = get_video()
 
-    send_message("🔍 Finding video...")
-
-    url = get_video(random.choice(channels))
-
-    if not url:
-        send_message("❌ No video found")
+    if not video_id:
+        print("No video found")
         return
 
-    send_message(f"🎬 {url}")
+    print("Downloading video...")
+    video_file = download_video(video_id)
 
-    vid = download(url)
+    print("Creating clip...")
+    clip_file, start_time = make_clip(video_file)
 
-    if not vid:
-        send_message("❌ Download failed")
-        return
+    video_link = f"https://youtu.be/{video_id}?t={start_time}"
 
-    send_message("✂️ Making clips...")
+    caption = f"🔥 Viral Clip\n\n🎥 Watch full: {video_link}"
 
-    clips = make_clips(vid)
-
-    for c in clips:
-        send_video(c)
-
-    send_message("✅ Done!")
+    print("Sending to Telegram...")
+    send_video(clip_file, caption)
 
 if __name__ == "__main__":
     main()
